@@ -84,7 +84,7 @@ input_text = st.text_area(
 )
 
 # =========================
-# 5. Translation Engine (429-safe)
+# 5. Translation Engine (404 & 429 safe)
 # =========================
 def translate_engine(text, pair, style, api_key):
     genai.configure(api_key=api_key)
@@ -92,11 +92,11 @@ def translate_engine(text, pair, style, api_key):
     temperature = 0.8 if "Cinematic" in style else 0.2
     source_lang, target_lang = pair.split(" to ")
 
-    # ✅ Free Tier safe models only
+    # ✅ Free Tier safe model only
     model_list = [
-        "gemini-1.5-flash",  # Free Tier friendly
-        "gemini-1.5-pro"     # Paid / higher quota
-        # "gemini-2.0-flash-exp" # Optional, heavy quota, commented out
+        "gemini-1.5-flash"
+        # "gemini-1.5-pro"       # Paid only, API may not find for Free Tier
+        # "gemini-2.0-flash-exp" # Experimental / quota heavy, comment out for Free Tier
     ]
 
     prompt = f"""
@@ -127,7 +127,7 @@ SRT CONTENT:
 
         except Exception as e:
             last_error = str(e)
-            continue  # fallback next model
+            continue  # fallback next model if available
 
     return f"ERROR: {last_error}"
 
@@ -148,7 +148,9 @@ if st.button("🚀 START TRANSLATING"):
 
             if result.startswith("ERROR:"):
                 st.error(result)
-                st.info("👉 Free Tier quota မကျော်မနေမီ gemini-1.5-flash သုံးပါ / Paid Key Upgrade လုပ်ပါ")
+                st.info(
+                    "👉 Free Tier quota မကျော်မနေမီ gemini-1.5-flash သုံးပါ / Paid Key Upgrade လုပ်ပါ"
+                )
             else:
                 st.session_state.result = result
                 st.success("✅ Translation Complete")
