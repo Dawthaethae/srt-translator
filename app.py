@@ -2,7 +2,7 @@ import streamlit as st
 import google.generativeai as genai
 
 # ၁။ Page Setting
-st.set_page_config(page_title="Pro SRT Translator", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="Ultimate SRT Translator", page_icon="🌐", layout="wide")
 
 # ၂။ Session State
 if 'api_key' not in st.session_state:
@@ -49,45 +49,43 @@ if not st.session_state['api_key']:
 # ၅။ Input Area
 input_text = st.text_area("PASTE YOUR SRT CONTENT:", height=350, placeholder="1\n00:00:01,000 --> 00:00:04,000\nText here...")
 
-# ၆။ Translation Engine (Final Fix for 404 Error)
+# ၆။ Translation Engine (Gemini 2.5/2.0 & 1.5 Compatibility Fix)
 def translate_engine(text, pair, mode, key):
     try:
-        # API Key ကို configure လုပ်ခြင်း
         genai.configure(api_key=key)
-        
         temp = 0.8 if "Cinematic" in mode else 0.2
         source_lang, target_lang = pair.split(" to ")
         
-        # model နာမည်ကို -latest ထည့်ပြီး အသေချာဆုံးပုံစံဖြင့် ခေါ်ယူခြင်း
-        # 404 Error အတွက် အထိရောက်ဆုံး fix ဖြစ်ပါသည်
-        model = genai.GenerativeModel(
-            model_name='gemini-1.5-flash-latest', 
-            generation_config={"temperature": temp}
-        )
+        # မော်ဒယ်နာမည်များကို အစဉ်လိုက် စမ်းသပ်ခြင်း (404 Error ကျော်လွှားရန်)
+        # ၁။ ပထမဦးဆုံး gemini-1.5-flash-latest ကို စမ်းပါ
+        # ၂။ မရပါက gemini-1.5-flash ကို စမ်းပါ
+        model_names = ['gemini-1.5-flash-latest', 'gemini-1.5-flash', 'gemini-2.0-flash-exp']
         
-        prompt = f"Professional SRT Translation: {source_lang} to {target_lang}. Keep timing/tags. Result only:\n\n{text}"
+        last_error = ""
+        for m_name in model_names:
+            try:
+                model = genai.GenerativeModel(model_name=m_name, generation_config={"temperature": temp})
+                prompt = f"Professional SRT Translation: {source_lang} to {target_lang}. Keep timing. Result only:\n\n{text}"
+                response = model.generate_content(prompt)
+                return response.text
+            except Exception as e:
+                last_error = str(e)
+                continue # နောက်ထပ် မော်ဒယ်နာမည်တစ်ခုဖြင့် ထပ်စမ်းပါ
         
-        response = model.generate_content(prompt)
-        return response.text
+        return f"ERROR: {last_error}"
         
     except Exception as e:
-        # အကယ်၍ error ထပ်တက်ပါက model name ကို အခြေခံအကျဆုံးပုံစံဖြင့် ထပ်စမ်းခြင်း
-        try:
-            model_basic = genai.GenerativeModel('gemini-1.5-flash')
-            response_basic = model_basic.generate_content(f"Translate to {target_lang}: {text}")
-            return response_basic.text
-        except:
-            return f"ERROR: {str(e)}"
+        return f"ERROR: {str(e)}"
 
 # ၇။ Start Button
 if st.button("🚀 START TRANSLATING"):
     if input_text:
-        with st.spinner(f"Translating {lang_pair}..."):
+        with st.spinner(f"Processing with latest Gemini model..."):
             result = translate_engine(input_text, lang_pair, version, st.session_state['api_key'])
             
             if "ERROR:" in result:
                 st.error(f"❌ {result}")
-                st.info("အကြံပြုချက်: API Key အသစ်တစ်ခုကို Google AI Studio တွင် ထပ်ထုတ်ပြီး စမ်းကြည့်ပါ။")
+                st.info("API Key ကို Google AI Studio မှာ အသစ်ပြန်ထုတ်ပြီး စမ်းကြည့်ဖို့ အကြံပြုလိုပါတယ်။")
             else:
                 st.session_state['result'] = result
                 st.success("Done!")
