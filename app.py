@@ -1,5 +1,5 @@
 import streamlit as st
-import google.generativeai as genai
+import google.genai as genai
 
 # =========================
 # 1. Page Config
@@ -60,8 +60,8 @@ with st.sidebar:
     style_mode = st.selectbox(
         "Translation Style",
         [
-            "ဆီလျော်အောင် (Cinematic)",
-            "တိတိကျကျ (Literal)"
+            "Cinematic",
+            "Literal"
         ]
     )
 
@@ -84,24 +84,25 @@ input_text = st.text_area(
 )
 
 # =========================
-# 5. Translation Engine (404 & 429 safe)
+# 5. Translation Engine
 # =========================
 def translate_engine(text, pair, style, api_key):
     genai.configure(api_key=api_key)
 
-    temperature = 0.8 if "Cinematic" in style else 0.2
+    temperature = 0.8 if style == "Cinematic" else 0.2
     source_lang, target_lang = pair.split(" to ")
 
-    # ✅ Free Tier safe model only
-    model_list = [
-        "gemini-1.5-flash"
-        # "gemini-1.5-pro"       # Paid only, API may not find for Free Tier
-        # "gemini-2.0-flash-exp" # Experimental / quota heavy, comment out for Free Tier
-    ]
+    # Get available models
+    try:
+        models = list(genai.list_models())
+        model_list = [m["name"] for m in models if "flash" in m["name"].lower()]
+        if not model_list:
+            return "ERROR: No available model found for your API key."
+    except Exception as e:
+        return f"ERROR: Could not list models. {str(e)}"
 
     prompt = f"""
 You are a professional subtitle translator.
-
 Translate SRT subtitles from {source_lang} to {target_lang}.
 - Keep original timestamps
 - Keep subtitle numbering
@@ -115,19 +116,16 @@ SRT CONTENT:
     last_error = ""
     for model_name in model_list:
         try:
-            model = genai.GenerativeModel(
-                model_name=model_name,
-                generation_config={
-                    "temperature": temperature,
-                    "max_output_tokens": 8192
-                }
+            response = genai.generate_text(
+                model=model_name,
+                temperature=temperature,
+                max_output_tokens=8192,
+                prompt=prompt
             )
-            response = model.generate_content(prompt)
             return response.text
-
         except Exception as e:
             last_error = str(e)
-            continue  # fallback next model if available
+            continue
 
     return f"ERROR: {last_error}"
 
@@ -149,7 +147,7 @@ if st.button("🚀 START TRANSLATING"):
             if result.startswith("ERROR:"):
                 st.error(result)
                 st.info(
-                    "👉 Free Tier quota မကျော်မနေမီ gemini-1.5-flash သုံးပါ / Paid Key Upgrade လုပ်ပါ"
+                    "👉 Check your API key / quota. Free Tier may have limits."
                 )
             else:
                 st.session_state.result = result
