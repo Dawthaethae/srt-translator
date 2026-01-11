@@ -26,10 +26,9 @@ def clear_all():
 # 3. Sidebar
 # =========================
 with st.sidebar:
-    st.title("🔑 Gemini API")
-
+    st.title("🔑 Gemini API Key")
     api_key = st.text_input(
-        "Enter Gemini API Key",
+        "Enter your Gemini API Key",
         value=st.session_state.api_key,
         type="password"
     )
@@ -38,8 +37,7 @@ with st.sidebar:
     with col1:
         if st.button("💾 Save"):
             st.session_state.api_key = api_key
-            st.success("API Key saved")
-
+            st.success("API Key saved!")
     with col2:
         if st.button("🗑️ Remove"):
             st.session_state.api_key = ""
@@ -47,9 +45,7 @@ with st.sidebar:
             st.rerun()
 
     st.divider()
-
     st.title("⚙️ Settings")
-
     lang_pair = st.selectbox(
         "Language Pair",
         [
@@ -88,7 +84,7 @@ input_text = st.text_area(
 )
 
 # =========================
-# 5. Translation Engine
+# 5. Translation Engine (429-safe)
 # =========================
 def translate_engine(text, pair, style, api_key):
     genai.configure(api_key=api_key)
@@ -96,11 +92,11 @@ def translate_engine(text, pair, style, api_key):
     temperature = 0.8 if "Cinematic" in style else 0.2
     source_lang, target_lang = pair.split(" to ")
 
-    # ✅ Stable models only (NO -latest)
+    # ✅ Free Tier safe models only
     model_list = [
-        "gemini-1.5-flash",      # fast & cheap
-        "gemini-1.5-pro",        # high quality
-        "gemini-2.0-flash-exp"   # experimental
+        "gemini-1.5-flash",  # Free Tier friendly
+        "gemini-1.5-pro"     # Paid / higher quota
+        # "gemini-2.0-flash-exp" # Optional, heavy quota, commented out
     ]
 
     prompt = f"""
@@ -117,7 +113,6 @@ SRT CONTENT:
 """
 
     last_error = ""
-
     for model_name in model_list:
         try:
             model = genai.GenerativeModel(
@@ -132,7 +127,7 @@ SRT CONTENT:
 
         except Exception as e:
             last_error = str(e)
-            continue
+            continue  # fallback next model
 
     return f"ERROR: {last_error}"
 
@@ -153,7 +148,7 @@ if st.button("🚀 START TRANSLATING"):
 
             if result.startswith("ERROR:"):
                 st.error(result)
-                st.info("👉 API Key အသစ်ပြန်ထုတ်ပြီး Google AI Studio မှာ စမ်းကြည့်ပါ")
+                st.info("👉 Free Tier quota မကျော်မနေမီ gemini-1.5-flash သုံးပါ / Paid Key Upgrade လုပ်ပါ")
             else:
                 st.session_state.result = result
                 st.success("✅ Translation Complete")
