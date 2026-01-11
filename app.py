@@ -2,101 +2,116 @@ import streamlit as st
 import google.generativeai as genai
 
 # ၁။ Page Setting
-st.set_page_config(page_title="Secure SRT Translator", page_icon="🎬", layout="wide")
+st.set_page_config(page_title="Pro Multi-Lang SRT", page_icon="🌐", layout="wide")
 
-# ၂။ Session State များ သတ်မှတ်ခြင်း
+# ၂။ Session State
 if 'api_key' not in st.session_state:
     st.session_state['api_key'] = ""
-if 'input_content' not in st.session_state:
-    st.session_state['input_content'] = ""
 if 'result' not in st.session_state:
     st.session_state['result'] = None
 
-# စာသားများ ရှင်းလင်းသည့် Function
 def clear_text():
-    st.session_state['input_content'] = ""
     st.session_state['result'] = None
 
-# API Key ဖျက်သည့် Function
-def remove_key():
-    st.session_state['api_key'] = ""
-    st.success("API Key ကို ဖယ်ရှားပြီးပါပြီ။")
-
-# ၃။ Sidebar - API Key Management & Settings
+# ၃။ Sidebar - Settings
 with st.sidebar:
-    st.title("🔑 API Settings")
-    
-    # API Key ရိုက်ထည့်ရန် နေရာ (Password type မို့လို့ အစက်လေးတွေပဲ မြင်ရမယ်၊ မျက်လုံးပုံလေးနှိပ်ရင် ပြန်မြင်ရမယ်)
+    st.title("🔑 API Access")
     user_key = st.text_input("Enter Gemini API Key:", value=st.session_state['api_key'], type="password")
     
     col_k1, col_k2 = st.columns(2)
     with col_k1:
         if st.button("💾 Save Key"):
             st.session_state['api_key'] = user_key
-            st.success("Key saved for this session!")
+            st.success("Key saved!")
     with col_k2:
         if st.button("🗑️ Remove Key"):
-            remove_key()
+            st.session_state['api_key'] = ""
+            st.session_state['result'] = None
             st.rerun()
 
     st.divider()
     st.title("⚙️ Control Panel")
-    lang_direction = st.selectbox("Direction:", ["English to Myanmar", "Myanmar to English"])
-    version = st.selectbox("Mode:", ["ဆီလျော်အောင် (Cinematic)", "တိတိကျကျ (Literal)"])
     
-    if st.button("🗑️ CLEAR ALL TEXT", on_click=clear_text):
+    lang_pair = st.selectbox(
+        "Select Language Pair:",
+        ["English to Myanmar", "Korea to English", "Chinese to English", "Korea to Myanmar", "Chinese to Myanmar"]
+    )
+    
+    version = st.selectbox("Style Mode:", ["ဆီလျော်အောင် (Cinematic)", "တိတိကျကျ (Literal)"])
+    
+    if st.button("🗑️ CLEAR ALL", on_click=clear_text):
         st.rerun()
 
 # ၄။ Main UI
-st.title("🎬 PROFESSIONAL SRT TRANSLATOR")
+st.title("🌐 MULTI-LANGUAGE SRT TRANSLATOR")
 
-# API Key ရှိမရှိ စစ်ဆေးခြင်း
 if not st.session_state['api_key']:
-    st.warning("⚠️ ရှေ့ဆက်ရန် API Key ကို Sidebar တွင် အရင်ထည့်ပြီး Save နှိပ်ပေးပါ။")
+    st.warning("⚠️ Please enter and save your API Key in the sidebar first.")
     st.stop()
 
-# ၅။ Paste Area
-input_text = st.text_area(
-    "PASTE YOUR SRT HERE:", 
-    value=st.session_state['input_content'], 
-    height=400, 
-    placeholder="1\n00:00:00,300 --> 00:00:05,460\nText here...",
-    key="srt_input"
-)
+# ၅။ Input Area
+input_text = st.text_area("PASTE YOUR SRT CONTENT:", height=350, placeholder="1\n00:00:01,000 --> 00:00:04,000\nText here...")
 
-# ၆။ Translation Logic
-def translate_srt(text, direction, mode, key):
-    genai.configure(api_key=key)
+# ၆။ Translation Engine with Validation
+def translate_engine(text, pair, mode, key):
+    try:
+        genai.configure(api_key=key)
+        # API Key အလုပ်လုပ်မလုပ် စစ်ဆေးရန် (Model list ကို ခေါ်ကြည့်ခြင်း)
+        list(genai.list_models()) 
+    except Exception:
+        return "ERROR_API_INVALID"
+
     temp = 0.8 if "Cinematic" in mode else 0.2
-    lang_prompt = "Translate English to Myanmar." if direction == "English to Myanmar" else "Translate Myanmar to English."
+    source_lang, target_lang = pair.split(" to ")
+    style_desc = "cinematic and natural" if temp == 0.8 else "literal and accurate"
     
-    model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"temperature": temp})
-    full_prompt = f"Task: {lang_prompt} Keep timestamps. Result only:\n\n{text}"
+    model = genai.GenerativeModel(
+        model_name='gemini-1.5-flash',
+        generation_config={"temperature": temp}
+    )
     
-    response = model.generate_content(full_prompt)
-    return response.text
+    prompt = f"Task: Translate {source_lang} to {target_lang}. Style: {style_desc}. Keep SRT tags. Result only:\n\n{text}"
+    
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"ERROR_GEN: {str(e)}"
 
-# ၇။ Translate Button
-if st.button("🚀 START TRANSLATION"):
+# ၇။ Run Button
+if st.button("🚀 START TRANSLATING"):
     if input_text:
-        with st.spinner("Processing..."):
-            try:
-                result = translate_srt(input_text, lang_direction, version, st.session_state['api_key'])
+        with st.spinner(f"Validating & Translating {lang_pair}..."):
+            result = translate_engine(input_text, lang_pair, version, st.session_state['api_key'])
+            
+            if result == "ERROR_API_INVALID":
+                st.error("❌ Invalid API Key! Please check your key and try again.")
+            elif result.startswith("ERROR_GEN"):
+                st.error(f"❌ Translation Failed: {result}")
+            else:
                 st.session_state['result'] = result
-                st.success("ဘာသာပြန်ခြင်း ပြီးမြောက်ပါပြီ!")
-            except Exception as e:
-                st.error(f"Error: API Key မှားယွင်းနေပုံရပါသည်။ ({e})")
+                st.success("Translation Complete!")
     else:
-        st.warning("စာသား အရင်ထည့်ပါ။")
+        st.warning("Please paste some text.")
 
-# ၈။ Download Section
+# ၈။ Result & Rename Download Section
 if st.session_state['result']:
     st.divider()
+    st.subheader("💾 Download Section")
+    
+    # ဖိုင်နာမည်ကို စိတ်ကြိုက် Rename လုပ်ရန်အကွက်
+    default_filename = f"{lang_pair.replace(' ', '_')}_translated"
+    custom_name = st.text_input("Rename your file (Optional):", value=default_filename)
+    
+    # .srt extension အလိုအလျောက်ပါဝင်အောင်လုပ်ခြင်း
+    final_filename = f"{custom_name}.srt" if not custom_name.endswith(".srt") else custom_name
+
     st.download_button(
-        label="📥 DOWNLOAD .SRT FILE",
+        label=f"📥 DOWNLOAD {final_filename}",
         data=st.session_state['result'],
-        file_name="translated_subtitle.srt",
+        file_name=final_filename,
         mime="text/plain"
     )
+    
     with st.expander("Preview"):
         st.text(st.session_state['result'])
