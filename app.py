@@ -1,8 +1,9 @@
 import streamlit as st
 import google.generativeai as genai
+import time
 
 # ၁။ Page Setting
-st.set_page_config(page_title="Professional SRT Translator", page_icon="🌐", layout="wide")
+st.set_page_config(page_title="Pro SRT Translator", page_icon="🌐", layout="wide")
 
 # ၂။ Session State
 if 'api_key' not in st.session_state:
@@ -34,7 +35,6 @@ with st.sidebar:
         "Select Language Pair:",
         ["English to Myanmar", "Korea to English", "Chinese to English", "Korea to Myanmar", "Chinese to Myanmar"]
     )
-    
     st.write("**Translation Version:**")
     mode = st.radio("Choose Mode:", ["ဆီလျော်အောင် (Cinematic)", "တိတိကျကျ (Literal)"], horizontal=True)
 
@@ -49,48 +49,70 @@ if not st.session_state['api_key']:
 input_text = st.text_area(
     "PASTE YOUR SRT CONTENT:", 
     height=350, 
-    placeholder="Paste text here...",
+    placeholder="Paste long SRT text here (e.g. 11 mins video content)...",
     key=f"srt_input_{st.session_state['input_reset_key']}"
 )
 
-# ၆။ Buttons Row (Start ကို ဘယ်ဘက်၊ Clear ကို ညာဘက်အစွန်တွင် ထားခြင်း)
-col1, col2 = st.columns([1, 1]) # Column နှစ်ခုကို ညီတူညီမျှ ခွဲလိုက်သည်
-
+# ၆။ Buttons Row
+col1, col2 = st.columns([1, 1])
 with col1:
-    # START ခလုတ်ကို ဘယ်ဘက်မှာ ထားသည်
     start_btn = st.button("🚀 START TRANSLATING")
-
 with col2:
-    # CLEAR ခလုတ်ကို ညာဘက်အစွန်မှာ ပေါ်စေရန် column အတွင်း ညာကပ်လိုက်သည်
     st.markdown('<div style="text-align: right;">', unsafe_allow_html=True)
     if st.button("🗑️ CLEAR TEXT"):
         st.session_state['input_reset_key'] += 1
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
 
-# ၇။ Smart Translation Engine
+# ၇။ Smart Translation Engine (Long Context Support)
 def translate_engine(text, pair, mode, key):
     try:
         genai.configure(api_key=key)
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        selected_model = next((m for m in available_models if "flash" in m), available_models[0] if available_models else "models/gemini-1.5-flash")
-
-        temp = 0.8 if "ဆီလျော်အောင်" in mode else 0.2
-        source_lang, target_lang = pair.split(" to ")
-        style_inst = "cinematic/natural" if temp == 0.8 else "literal/accurate"
-            
-        model = genai.GenerativeModel(model_name=selected_model, generation_config={"temperature": temp})
-        prompt = f"Professional SRT Translation: {source_lang} to {target_lang}. {style_inst}. Keep timing. Result only:\n\n{text}"
         
-        response = model.generate_content(prompt)
-        return response.text
+        # အလုပ်လုပ်သော Model ကို ရှာဖွေခြင်း
+        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
+        selected_model = next((m for m in available_models if "flash" in m), available_models[0])
+
+        source_lang, target_lang = pair.split(" to ")
+        temp = 0.8 if "ဆီလျော်အောင်" in mode else 0.2
+        
+        # စာကြောင်းရေများပါက အပိုင်းလိုက်ခွဲရန် (SRT တစ်ခုကို စာကြောင်းရေ ၈၀ ခန့်စီ ခွဲမည်)
+        lines = text.strip().split('\n\n')
+        chunks = [lines[i:i + 80] for i in range(0, len(lines), 80)]
+        
+        full_translation = []
+        progress_bar = st.progress(0)
+        
+        model = genai.GenerativeModel(model_name=selected_model, generation_config={"temperature": temp})
+        
+        # ဇာတ်လမ်း Context မပျောက်စေရန် အပိုင်းတိုင်းတွင် ညွှန်ကြားချက် ထပ်ထည့်မည်
+        for index, chunk in enumerate(chunks):
+            chunk_text = '\n\n'.join(chunk)
+            context_prompt = f"""
+            Task: Professional Movie Subtitle Translation ({pair}).
+            Mode: {mode}.
+            Note: This is part {index+1} of a long movie script. Keep consistency with previous parts.
+            Instruction: Keep timing tags. Translate dialogue only. Result only:
+            
+            {chunk_text}
+            """
+            
+            response = model.generate_content(context_prompt)
+            full_translation.append(response.text)
+            
+            # Progress bar update
+            progress_bar.progress((index + 1) / len(chunks))
+            time.sleep(1) # API Rate limit မကျော်အောင် ခဏနားခြင်း
+            
+        return '\n\n'.join(full_translation)
+        
     except Exception as e:
         return f"ERROR: {str(e)}"
 
-# Start ခလုတ် Logic
+# Start Logic
 if start_btn:
     if input_text:
-        with st.spinner(f"Translating..."):
+        with st.spinner(f"Analyzing and Translating in {mode} version..."):
             result = translate_engine(input_text, lang_pair, mode, st.session_state['api_key'])
             if "ERROR:" in result:
                 st.error(f"❌ {result}")
@@ -103,18 +125,10 @@ if start_btn:
 # ၈။ Result & Download Section
 if st.session_state['result']:
     st.divider()
-    st.subheader("✅ Translation Ready")
-    
     default_name = f"{lang_pair.replace(' ', '_')}_translated"
     custom_name = st.text_input("Rename your file:", value=default_name)
     final_name = f"{custom_name}.srt" if not custom_name.endswith(".srt") else custom_name
 
-    st.download_button(
-        label=f"📥 DOWNLOAD {final_name}",
-        data=st.session_state['result'],
-        file_name=final_name,
-        mime="text/plain"
-    )
-    
+    st.download_button(label=f"📥 DOWNLOAD {final_name}", data=st.session_state['result'], file_name=final_name, mime="text/plain")
     with st.expander("Preview Translated Text"):
         st.text(st.session_state['result'])
