@@ -18,21 +18,24 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Video Cutter Pro</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background: #0f0f0f; color: white; text-align: center; padding: 50px; margin: 0; }
-        .card { background: #1a1a1a; padding: 30px; border-radius: 20px; width: 90%; max-width: 400px; margin: auto; border: 1px solid #333; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        h2 { color: #3b82f6; }
-        input { width: 100%; padding: 15px; margin: 20px 0; border-radius: 10px; border: 1px solid #333; background: #252525; color: white; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f0f0f; color: white; text-align: center; padding: 40px; margin: 0; }
+        .card { background: #1a1a1a; padding: 30px; border-radius: 20px; width: 90%; max-width: 420px; margin: auto; border: 1px solid #333; box-shadow: 0 15px 35px rgba(0,0,0,0.6); }
+        h2 { color: #3b82f6; margin-bottom: 10px; }
+        p { color: #888; font-size: 14px; margin-bottom: 20px; }
+        input { width: 100%; padding: 15px; margin: 15px 0; border-radius: 10px; border: 1px solid #333; background: #252525; color: white; box-sizing: border-box; outline: none; }
+        input:focus { border-color: #3b82f6; }
         button { width: 100%; padding: 15px; background: #3b82f6; color: white; border: none; border-radius: 10px; cursor: pointer; font-size: 16px; font-weight: bold; transition: 0.3s; }
         button:hover { background: #2563eb; }
-        #status { margin-top: 20px; color: #bbb; font-size: 14px; line-height: 1.6; }
-        .success { color: #4ade80; font-weight: bold; }
-        .error { color: #f87171; }
+        button:disabled { background: #444; cursor: not-allowed; }
+        #status { margin-top: 25px; color: #bbb; font-size: 14px; line-height: 1.6; }
+        .success-box { background: #064e3b; color: #a7f3d0; padding: 15px; border-radius: 10px; margin-top: 20px; }
+        .error-box { background: #450a0a; color: #fca5a5; padding: 15px; border-radius: 10px; margin-top: 20px; }
     </style>
 </head>
 <body>
     <div class="card">
         <h2>🎬 AI Video Cutter</h2>
-        <p>Production Mode (Fixed Format)</p>
+        <p>Production Mode (360p Fixed)</p>
         <input type="text" id="url" placeholder="YouTube Link ကို ထည့်ပါ...">
         <button id="btn" onclick="run()">ဗီဒီယို ဖြတ်ထုတ်မည်</button>
         <div id="status"></div>
@@ -47,7 +50,7 @@ HTML_TEMPLATE = """
             if(!urlInput) return alert("Link ထည့်ပေးပါဦး");
 
             btn.disabled = true;
-            status.innerHTML = "⏳ YouTube ကနေ ဗီဒီယိုကို ရှာဖွေနေပါသည်...<br><small>(Format မျိုးစုံ စစ်ဆေးနေသည်)</small>";
+            status.innerHTML = "⏳ YouTube ကနေ ဗီဒီယိုကို ဖတ်နေပါပြီ...<br><small>(Format 18 ရှာဖွေနေသည်)</small>";
 
             try {
                 const res = await fetch('/run', {
@@ -59,13 +62,13 @@ HTML_TEMPLATE = """
                 
                 btn.disabled = false;
                 if(data.success) {
-                    status.innerHTML = `<span class="success">✅ အောင်မြင်ပါသည်!</span><br>Render ID: \${data.id}<br><br><small>Shotstack Dashboard မှာ ဗီဒီယိုကို သွားကြည့်နိုင်ပါပြီ။</small>`;
+                    status.innerHTML = `<div class="success-box">✅ အောင်မြင်ပါသည်!<br>Render ID: \${data.id}<br><br><small>Shotstack Dashboard မှာ ဗီဒီယိုကို စစ်ကြည့်ပါ။</small></div>`;
                 } else {
-                    status.innerHTML = `<span class="error">❌ Error:</span><br>\${data.error}`;
+                    status.innerHTML = `<div class="error-box">❌ Error:<br>\${data.error}</div>`;
                 }
             } catch (e) {
                 btn.disabled = false;
-                status.innerHTML = `<span class="error">❌ စနစ်ချို့ယွင်းချက် ဖြစ်ပေါ်နေသည်။</span>`;
+                status.innerHTML = `<div class="error-box">❌ စနစ်ချို့ယွင်းချက် ရှိနေသည်။</div>`;
             }
         }
     </script>
@@ -81,23 +84,22 @@ def home():
 def run_app():
     data = request.json
     try:
-        # ၁။ YouTube Options (Format Error ကို ရှင်းထားသည်)
+        # YouTube Options - Format 18 (MP4 360p) ကို အဓိက သုံးထားသည်
         ydl_opts = {
-            # mp4 format အားလုံးကို ရှာခိုင်းပြီး အဆင်ပြေဆုံးကို ယူမည့် logic
-            'format': 'best[ext=mp4]/best', 
+            'format': '18/best[ext=mp4]/best', 
             'quiet': True,
             'no_warnings': True,
             'cookiefile': 'cookies.txt', 
-            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+            'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
             'nocheckcertificate': True
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # ဗီဒီယို အချက်အလက်များကို ထုတ်ယူခြင်း
+            # ဗီဒီယို Extract လုပ်ခြင်း
             info = ydl.extract_info(data['url'], download=False)
             video_url = info['url']
 
-        # ၂။ Shotstack API (ဗီဒီယို ဖြတ်တောက်ရန်)
+        # Shotstack API သို့ ပို့ခြင်း
         ss_headers = {
             "x-api-key": MY_SHOTSTACK_KEY,
             "Content-Type": "application/json"
@@ -110,16 +112,16 @@ def run_app():
                         "asset": {
                             "type": "video",
                             "src": video_url,
-                            "trim": 0 # ဗီဒီယို အစကနေ စဖြတ်မည်
+                            "trim": 0
                         },
                         "start": 0,
-                        "length": 15 # ၁၅ စက္ကန့် ဖြတ်ထုတ်မည်
+                        "length": 10  # ၁၀ စက္ကန့် ဖြတ်မည်
                     }]
                 }]
             },
             "output": {
                 "format": "mp4",
-                "resolution": "sd" # Render မြန်အောင် sd နဲ့ ထားထားသည်
+                "resolution": "sd"
             }
         }
         
@@ -128,7 +130,7 @@ def run_app():
         if ss_res.get('success'):
             return jsonify({"success": True, "id": ss_res['response']['id']})
         else:
-            return jsonify({"success": False, "error": ss_res.get('message', 'Shotstack Processing Error')})
+            return jsonify({"success": False, "error": ss_res.get('message', 'Shotstack error')})
             
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
