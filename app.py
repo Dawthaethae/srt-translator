@@ -1,145 +1,77 @@
-
-import streamlit as st
+import requests
+import yt_dlp
 import google.generativeai as genai
-import time
+from flask import Flask, render_template_string, request, jsonify
 
-# ၁။ Page Setting
-st.set_page_config(page_title="Pro Movie SRT Translator", page_icon="🎬", layout="wide")
+app = Flask(__name__)
 
-# ၂။ Session State
-if 'api_key' not in st.session_state:
-    st.session_state['api_key'] = ""
-if 'result' not in st.session_state:
-    st.session_state['result'] = None
-if 'input_reset_key' not in st.session_state:
-    st.session_state['input_reset_key'] = 0
+# API Keys များ (Production Version)
+MY_GEMINI_KEY = "AIzaSyAxIDo81UMMs89glzAEN2bxClmR_2S-x0Y"
+MY_SHOTSTACK_KEY = "FbS7eq7HlwFEC8UwJQF0QrYsOQyUNaa7rU6ckHDM"
+MY_TWELVE_LABS_KEY = "tl_01j74z96sytm6n0pnd33y7x2v1"
 
-# ၃။ Sidebar - API Settings
-with st.sidebar:
-    st.title("🔑 API Settings")
-    user_key = st.text_input("Enter API Key:", value=st.session_state['api_key'], type="password")
-    
-    col_k1, col_k2 = st.columns(2)
-    with col_k1:
-        if st.button("💾 Save Key"):
-            st.session_state['api_key'] = user_key
-            st.success("Key saved!")
-    with col_k2:
-        if st.button("🗑️ Remove Key"):
-            st.session_state['api_key'] = ""
-            st.session_state['result'] = None
-            st.rerun()
+genai.configure(api_key=MY_GEMINI_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
 
-    st.divider()
-    st.title("⚙️ Control Panel")
-    lang_pair = st.selectbox(
-        "Select Language Pair:",
-        ["English to Myanmar", "Korea to Myanmar", "Chinese to Myanmar", "Korea to English", "Chinese to English"]
-    )
-    st.write("**Translation Version:**")
-    mode = st.radio("Choose Mode:", ["ဆီလျော်အောင် (Cinematic)", "တိတိကျကျ (Literal)"], horizontal=True)
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AI Video Cutter Pro</title>
+    <style>
+        body { font-family: sans-serif; background: #121212; color: white; text-align: center; padding: 50px; }
+        .card { background: #1e1e1e; padding: 30px; border-radius: 15px; max-width: 400px; margin: auto; border: 1px solid #333; }
+        input { width: 100%; padding: 12px; margin: 20px 0; border-radius: 8px; border: 1px solid #444; background: #222; color: white; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #007bff; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        #status { margin-top: 20px; color: #aaa; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>🎬 AI Production Cutter</h2>
+        <p>YouTube Link ထည့်ပြီး ခလုတ်နှိပ်ပါ</p>
+        <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=...">
+        <button onclick="run()">ဗီဒီယို ဖြတ်မည်</button>
+        <div id="status"></div>
+    </div>
+    <script>
+        async function run() {
+            const status = document.getElementById('status');
+            status.innerHTML = "⏳ AI စတင်အလုပ်လုပ်နေပါပြီ (Production)...";
+            const res = await fetch('/run', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({url: document.getElementById('url').value})
+            });
+            const data = await res.json();
+            status.innerHTML = data.success ? "✅ အောင်မြင်ပါသည်! Shotstack Dashboard မှာ သွားကြည့်ပါ။" : "❌ Error: " + data.error;
+        }
+    </script>
+</body>
+</html>
+"""
 
-# ၄။ Main UI
-st.title("🎬 MOVIE RECAP SRT TRANSLATOR")
+@app.route('/')
+def home(): return render_template_string(HTML_TEMPLATE)
 
-if not st.session_state['api_key']:
-    st.warning("⚠️ Please enter and save your API Key in the sidebar.")
-    st.stop()
-
-# ၅။ Input Area
-input_text = st.text_area(
-    "PASTE YOUR SRT CONTENT:", 
-    height=350, 
-    placeholder="၁၁ မိနစ်စာ အရှည်ကြီးလည်း ထည့်လို့ရပါတယ်...",
-    key=f"srt_input_{st.session_state['input_reset_key']}"
-)
-
-# ၆။ Buttons Row
-col1, col2 = st.columns([1, 1])
-with col1:
-    start_btn = st.button("🚀 START TRANSLATING")
-with col2:
-    st.markdown('<div style="text-align: right;">', unsafe_allow_html=True)
-    if st.button("🗑️ CLEAR TEXT"):
-        st.session_state['input_reset_key'] += 1
-        st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
-
-# ၇။ Cinematic Engine (Gemini App ကဲ့သို့ Style ရအောင် ပြင်ဆင်ထားသည်)
-def translate_engine(text, pair, mode, key):
+@app.route('/run', methods=['POST'])
+def run_app():
     try:
-        genai.configure(api_key=key)
-        available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-        selected_model = next((m for m in available_models if "flash" in m), available_models[0])
-
-        source_lang, target_lang = pair.split(" to ")
+        data = request.json
+        with yt_dlp.YoutubeDL({'format': 'best', 'quiet': True}) as ydl:
+            info = ydl.extract_info(data['url'], download=False)
+            v_url = info['url']
         
-        # အပိုင်းလိုက်ခွဲခြင်း (Long Video များအတွက်)
-        lines = text.strip().split('\n\n')
-        chunks = [lines[i:i + 60] for i in range(0, len(lines), 60)]
-        
-        full_translation = []
-        progress_bar = st.progress(0)
-        model = genai.GenerativeModel(model_name=selected_model)
-        
-        # --- PROMPT IMPROVEMENT ---
-        if "ဆီလျော်အောင်" in mode:
-            # Gemini App ရဲ့ Style အတိုင်း ရအောင် ညွှန်ကြားချက်ကို အသေးစိတ်ပေးခြင်း
-            style_instruction = """
-            - Role: You are a professional movie subtitle translator and storyteller.
-            - Style: Translate into natural, cinematic, and conversational Myanmar Burmese.
-            - Vocabulary: Use engaging words like 'မိစ္ဆာ', 'သေမင်း', 'ရိုမန်းတစ်', 'အတင်းအဓမ္မ' instead of simple dictionary words.
-            - Sentence Flow: Make it sound like a movie recap narrator is telling a story. Avoid stiff or formal dictionary translations.
-            - Formatting: Keep SRT numbers and timing tags exactly the same.
-            """
-            temp = 0.9 # ဖန်တီးနိုင်စွမ်းကို မြှင့်တင်သည်
-        else:
-            style_instruction = "Translate literally and accurately. Keep it formal and precise. Keep timing tags."
-            temp = 0.2
-
-        for index, chunk in enumerate(chunks):
-            chunk_text = '\n\n'.join(chunk)
-            context_prompt = f"""
-            {style_instruction}
-            
-            Task: Translate from {source_lang} to {target_lang}.
-            Part: {index+1} of {len(chunks)}.
-            
-            Text to translate:
-            {chunk_text}
-            
-            Return ONLY the translated SRT content.
-            """
-            
-            response = model.generate_content(context_prompt, generation_config={"temperature": temp})
-            full_translation.append(response.text)
-            progress_bar.progress((index + 1) / len(chunks))
-            time.sleep(1)
-            
-        return '\n\n'.join(full_translation)
-        
+        headers = {"x-api-key": MY_SHOTSTACK_KEY, "Content-Type": "application/json"}
+        payload = {
+            "timeline": {"tracks": [{"clips": [{"asset": {"type": "video", "src": v_url, "trim": 2100}, "start": 0, "length": 60}]}]},
+            "output": {"format": "mp4", "resolution": "hd"}
+        }
+        res = requests.post("https://api.shotstack.io/v1/render", json=payload, headers=headers).json()
+        return jsonify({"success": True, "id": res['response']['id']})
     except Exception as e:
-        return f"ERROR: {str(e)}"
+        return jsonify({"success": False, "error": str(e)})
 
-# Start Logic
-if start_btn:
-    if input_text:
-        with st.spinner(f"Gemini App Style ဖြင့် ဘာသာပြန်နေသည်..."):
-            result = translate_engine(input_text, lang_pair, mode, st.session_state['api_key'])
-            if "ERROR:" in result:
-                st.error(f"❌ {result}")
-            else:
-                st.session_state['result'] = result
-                st.success("ဘာသာပြန်ခြင်း အောင်မြင်ပါသည်။")
-    else:
-        st.warning("စာသား အရင်ထည့်ပါ။")
-
-# ၈။ Result & Download Section
-if st.session_state['result']:
-    st.divider()
-    custom_name = st.text_input("Rename File:", value="translated_subtitle")
-    final_name = f"{custom_name}.srt" if not custom_name.endswith(".srt") else custom_name
-
-    st.download_button("📥 DOWNLOAD SRT", data=st.session_state['result'], file_name=final_name)
-    with st.expander("Preview"):
-        st.text(st.session_state['result'])
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
