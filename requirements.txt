@@ -1,2 +1,1 @@
-streamlit
-google-generativeai
+flask, requests, yt_dlp, google-generativeai
