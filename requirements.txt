@@ -1,5 +1,1 @@
-flask
-requests
-yt_dlp
-google-generativeai
-gunicorn
+gunicorn, flask, requests, yt_dlp, google-generativeai
